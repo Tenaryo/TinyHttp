@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-int main(int argc, char **argv) {
+auto main() -> int {
   std::cout << std::unitbuf;
   std::cerr << std::unitbuf;
   
