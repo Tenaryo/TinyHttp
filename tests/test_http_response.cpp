@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "request.hpp"
 #include "response.hpp"
 #include "server.hpp"
 
@@ -39,7 +40,18 @@ auto connect_and_read(uint16_t port, std::string_view request) -> std::string {
     return {buf, static_cast<size_t>(n)};
 }
 
-auto test_http_200_ok() -> void {
+auto route_response(std::string_view raw) -> std::vector<std::byte> {
+    auto parse_result = tinyhttp::parse_request(raw);
+    tinyhttp::Response resp;
+    if (parse_result && parse_result->path == "/") {
+        resp.set_status(200, "OK");
+    } else {
+        resp.set_status(404, "Not Found");
+    }
+    return resp.serialize();
+}
+
+auto test_http_200_root() -> void {
     tinyhttp::Server server{"0.0.0.0", TEST_PORT};
     auto listen_result = server.listen();
     assert(listen_result.has_value() && "server listen failed");
@@ -52,8 +64,8 @@ auto test_http_200_ok() -> void {
         auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
         assert(recv_result.has_value() && "recv failed");
 
-        tinyhttp::Response resp;
-        auto data = resp.serialize();
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
         auto send_result = conn_result->send(data);
         assert(send_result.has_value() && "send failed");
     });
@@ -63,11 +75,39 @@ auto test_http_200_ok() -> void {
 
     assert(response == "HTTP/1.1 200 OK\r\n\r\n" && "unexpected response");
 
-    std::cout << "test_http_200_ok: PASSED\n";
+    std::cout << "test_http_200_root: PASSED\n";
+}
+
+auto test_http_404_not_found() -> void {
+    tinyhttp::Server server{"0.0.0.0", TEST_PORT};
+    auto listen_result = server.listen();
+    assert(listen_result.has_value() && "server listen failed");
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        assert(conn_result.has_value() && "accept failed");
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        assert(recv_result.has_value() && "recv failed");
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        assert(send_result.has_value() && "send failed");
+    });
+
+    auto response = connect_and_read(TEST_PORT, "GET /abcdefg HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    accept_future.wait();
+
+    assert(response == "HTTP/1.1 404 Not Found\r\n\r\n" && "unexpected response");
+
+    std::cout << "test_http_404_not_found: PASSED\n";
 }
 
 auto main() -> int {
-    test_http_200_ok();
+    test_http_200_root();
+    test_http_404_not_found();
     std::cout << "All tests passed!\n";
     return 0;
 }

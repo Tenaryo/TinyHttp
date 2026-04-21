@@ -2,6 +2,7 @@ file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
 
 set(LIB_SOURCES
     ${CMAKE_SOURCE_DIR}/src/connection.cpp
+    ${CMAKE_SOURCE_DIR}/src/request.cpp
     ${CMAKE_SOURCE_DIR}/src/response.cpp
     ${CMAKE_SOURCE_DIR}/src/server.cpp
 )
