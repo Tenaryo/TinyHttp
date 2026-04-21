@@ -1,44 +1,31 @@
-#include <cassert>
-#include <iostream>
 #include <string_view>
+
+#include <gtest/gtest.h>
 
 #include "request.hpp"
 
-auto test_parse_root_path() -> void {
+TEST(ParseRequest, RootPath) {
     auto result = tinyhttp::parse_request("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert(result.has_value() && "parse should succeed");
-    assert(result->method == "GET");
-    assert(result->path == "/");
-    assert(result->version == "HTTP/1.1");
-    std::cout << "test_parse_root_path: PASSED\n";
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->method, "GET");
+    EXPECT_EQ(result->path, "/");
+    EXPECT_EQ(result->version, "HTTP/1.1");
 }
 
-auto test_parse_arbitrary_path() -> void {
+TEST(ParseRequest, ArbitraryPath) {
     auto result = tinyhttp::parse_request("GET /abcdefg HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    assert(result.has_value() && "parse should succeed");
-    assert(result->method == "GET");
-    assert(result->path == "/abcdefg");
-    assert(result->version == "HTTP/1.1");
-    std::cout << "test_parse_arbitrary_path: PASSED\n";
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->method, "GET");
+    EXPECT_EQ(result->path, "/abcdefg");
+    EXPECT_EQ(result->version, "HTTP/1.1");
 }
 
-auto test_parse_missing_crlf() -> void {
+TEST(ParseRequest, MissingCRLF) {
     auto result = tinyhttp::parse_request("GET / HTTP/1.1");
-    assert(!result.has_value() && "parse should fail without CRLF");
-    std::cout << "test_parse_missing_crlf: PASSED\n";
+    EXPECT_FALSE(result.has_value());
 }
 
-auto test_parse_malformed_request() -> void {
+TEST(ParseRequest, MalformedRequest) {
     auto result = tinyhttp::parse_request("INVALID\r\n");
-    assert(!result.has_value() && "parse should fail for malformed request");
-    std::cout << "test_parse_malformed_request: PASSED\n";
-}
-
-auto main() -> int {
-    test_parse_root_path();
-    test_parse_arbitrary_path();
-    test_parse_missing_crlf();
-    test_parse_malformed_request();
-    std::cout << "All tests passed!\n";
-    return 0;
+    EXPECT_FALSE(result.has_value());
 }

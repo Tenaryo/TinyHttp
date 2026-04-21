@@ -2,7 +2,6 @@
 set -euo pipefail
 
 BUILD_DIR="build"
-TEST_DIR="tests"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -27,60 +26,15 @@ echo -e "${YELLOW}Building tests...${NC}"
 cmake --build . -j$(nproc) 2>&1 | grep -E "(Building|Linking|error|warning)" || true
 echo
 
-TEST_EXECUTABLES=()
-for test_file in ../$TEST_DIR/*.cpp; do
-    test_name=$(basename "$test_file" .cpp)
-    test_executable="$TEST_DIR/$test_name"
-    if [ -f "$test_executable" ]; then
-        TEST_EXECUTABLES+=("$test_executable|$test_name")
-    fi
-done
-
-if [ ${#TEST_EXECUTABLES[@]} -eq 0 ]; then
-    echo -e "${YELLOW}No test executables found${NC}"
-    exit 0
-fi
-
-TOTAL_TESTS=${#TEST_EXECUTABLES[@]}
-PASSED=0
-FAILED=0
-FAILED_TESTS=()
-
-for test_entry in "${TEST_EXECUTABLES[@]}"; do
-    IFS='|' read -r test_executable test_name <<< "$test_entry"
-
-    echo -e "${BLUE}----------------------------------------${NC}"
-    echo -e "${BLUE}Running: $test_name${NC}"
-    echo -e "${BLUE}----------------------------------------${NC}"
-
-    if ./"$test_executable"; then
-        PASSED=$((PASSED + 1))
-        echo -e "${GREEN}PASSED: $test_name${NC}"
-    else
-        FAILED=$((FAILED + 1))
-        FAILED_TESTS+=("$test_name")
-        echo -e "${RED}FAILED: $test_name${NC}"
-    fi
-
-    echo
-done
-
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}   Test Summary${NC}"
-echo -e "${BLUE}========================================${NC}"
-echo -e "Total:  $TOTAL_TESTS"
-echo -e "${GREEN}Passed: $PASSED${NC}"
-echo -e "${RED}Failed: $FAILED${NC}"
+echo -e "${YELLOW}Running tests via ctest...${NC}"
 echo
 
-if [ $FAILED -gt 0 ]; then
-    echo -e "${RED}Failed tests:${NC}"
-    for test_name in "${FAILED_TESTS[@]}"; do
-        echo -e "  ${RED}$test_name${NC}"
-    done
+if ctest --output-on-failure -j$(nproc); then
     echo
+    echo -e "${GREEN}All tests passed!${NC}"
+    exit 0
+else
+    echo
+    echo -e "${RED}Some tests failed!${NC}"
     exit 1
 fi
-
-echo -e "${GREEN}All tests passed!${NC}"
-exit 0
