@@ -20,8 +20,13 @@ set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
 
-add_executable(TinyHttp src/main.cpp)
-target_link_libraries(TinyHttp PRIVATE TinyHttp_core Threads::Threads ZLIB::ZLIB)
+add_executable(http-server
+    src/main.cpp
+    src/connection.cpp
+    src/response.cpp
+    src/server.cpp
+)
+target_link_libraries(http-server PRIVATE TinyHttp_core Threads::Threads ZLIB::ZLIB)
 
 option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior Sanitizers" OFF)
 
