@@ -55,6 +55,7 @@ auto route_response(std::string_view raw) -> std::vector<std::byte> {
         resp.set_status(200, "OK");
         resp.add_header("Content-Type", "text/plain");
         auto body_str = std::string(*echo);
+        resp.add_header("Content-Length", std::to_string(body_str.size()));
         resp.set_body({reinterpret_cast<const std::byte*>(body_str.data()), body_str.size()});
     } else {
         resp.set_status(404, "Not Found");
@@ -136,5 +137,6 @@ TEST(HttpResponse, EchoEndpoint) {
     auto response = connect_and_read(port, "GET /echo/abc HTTP/1.1\r\nHost: localhost\r\n\r\n");
     accept_future.wait();
 
-    EXPECT_EQ(response, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc");
+    EXPECT_EQ(response,
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc");
 }

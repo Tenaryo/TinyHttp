@@ -27,7 +27,10 @@ auto parse_request(std::string_view raw) -> std::expected<Request, std::string> 
     };
 }
 
-auto match_echo_path(std::string_view /*path*/) -> std::optional<std::string_view> {
+auto match_echo_path(std::string_view path) -> std::optional<std::string_view> {
+    constexpr std::string_view prefix = "/echo/";
+    if (path.starts_with(prefix))
+        return path.substr(prefix.size());
     return std::nullopt;
 }
 

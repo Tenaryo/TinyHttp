@@ -39,8 +39,16 @@ auto main() -> int {
         auto parse_result = tinyhttp::parse_request(raw);
 
         tinyhttp::Response resp;
-        if (parse_result && parse_result->path == "/") {
+        if (!parse_result) {
+            resp.set_status(400, "Bad Request");
+        } else if (parse_result->path == "/") {
             resp.set_status(200, "OK");
+        } else if (auto echo = tinyhttp::match_echo_path(parse_result->path)) {
+            resp.set_status(200, "OK");
+            resp.add_header("Content-Type", "text/plain");
+            auto body = std::string(*echo);
+            resp.add_header("Content-Length", std::to_string(body.size()));
+            resp.set_body({reinterpret_cast<const std::byte*>(body.data()), body.size()});
         } else {
             resp.set_status(404, "Not Found");
         }
