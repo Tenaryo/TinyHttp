@@ -27,4 +27,8 @@ auto parse_request(std::string_view raw) -> std::expected<Request, std::string> 
     };
 }
 
+auto match_echo_path(std::string_view /*path*/) -> std::optional<std::string_view> {
+    return std::nullopt;
+}
+
 } // namespace tinyhttp

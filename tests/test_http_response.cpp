@@ -43,8 +43,19 @@ auto connect_and_read(uint16_t port, std::string_view request) -> std::string {
 auto route_response(std::string_view raw) -> std::vector<std::byte> {
     auto parse_result = tinyhttp::parse_request(raw);
     tinyhttp::Response resp;
-    if (parse_result && parse_result->path == "/") {
+    if (!parse_result) {
+        resp.set_status(400, "Bad Request");
+        return resp.serialize();
+    }
+
+    auto& path = parse_result->path;
+    if (path == "/") {
         resp.set_status(200, "OK");
+    } else if (auto echo = tinyhttp::match_echo_path(path)) {
+        resp.set_status(200, "OK");
+        resp.add_header("Content-Type", "text/plain");
+        auto body_str = std::string(*echo);
+        resp.set_body({reinterpret_cast<const std::byte*>(body_str.data()), body_str.size()});
     } else {
         resp.set_status(404, "Not Found");
     }
@@ -100,4 +111,30 @@ TEST(HttpResponse, Http404NotFound) {
     accept_future.wait();
 
     EXPECT_EQ(response, "HTTP/1.1 404 Not Found\r\n\r\n");
+}
+
+TEST(HttpResponse, EchoEndpoint) {
+    constexpr uint16_t port = TEST_PORT + 2;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(port, "GET /echo/abc HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    accept_future.wait();
+
+    EXPECT_EQ(response, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc");
 }
