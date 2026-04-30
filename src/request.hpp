@@ -16,7 +16,6 @@ class Request {
     std::string_view version;
 
     auto get_header(std::string_view name) const -> std::optional<std::string_view>;
-
   private:
     friend auto parse_request(std::string_view raw) -> std::expected<Request, std::string>;
     std::vector<std::pair<std::string_view, std::string_view>> headers_;

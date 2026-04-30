@@ -49,6 +49,12 @@ auto main() -> int {
             auto body = std::string(*echo);
             resp.add_header("Content-Length", std::to_string(body.size()));
             resp.set_body({reinterpret_cast<const std::byte*>(body.data()), body.size()});
+        } else if (parse_result->path == "/user-agent") {
+            resp.set_status(200, "OK");
+            resp.add_header("Content-Type", "text/plain");
+            auto ua = std::string(parse_result->get_header("User-Agent").value_or(""));
+            resp.add_header("Content-Length", std::to_string(ua.size()));
+            resp.set_body({reinterpret_cast<const std::byte*>(ua.data()), ua.size()});
         } else {
             resp.set_status(404, "Not Found");
         }
