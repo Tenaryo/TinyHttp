@@ -1,6 +1,13 @@
 #include "request.hpp"
 
+#include <algorithm>
+#include <ranges>
+
 namespace tinyhttp {
+
+auto Request::get_header(std::string_view /*name*/) const -> std::optional<std::string_view> {
+    return std::nullopt;
+}
 
 auto parse_request(std::string_view raw) -> std::expected<Request, std::string> {
     auto line_end = raw.find("\r\n");
@@ -20,11 +27,11 @@ auto parse_request(std::string_view raw) -> std::expected<Request, std::string> 
         return std::unexpected("invalid request: missing path-version separator");
     }
 
-    return Request{
-        .method = line.substr(0, sp1),
-        .path = line.substr(sp1 + 1, sp2 - sp1 - 1),
-        .version = line.substr(sp2 + 1),
-    };
+    Request req;
+    req.method = line.substr(0, sp1);
+    req.path = line.substr(sp1 + 1, sp2 - sp1 - 1);
+    req.version = line.substr(sp2 + 1);
+    return req;
 }
 
 auto match_echo_path(std::string_view path) -> std::optional<std::string_view> {

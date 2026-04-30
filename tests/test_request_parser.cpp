@@ -54,6 +54,26 @@ TEST(MatchEchoPath, NoTrailingSlashReturnsNullopt) {
     EXPECT_FALSE(result.has_value());
 }
 
+TEST(ParseRequest, ExtractsHeaders) {
+    auto result = tinyhttp::parse_request(
+        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\nAccept: */*\r\n\r\n");
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->get_header("User-Agent"), "foobar/1.2.3");
+    EXPECT_EQ(result->get_header("Host"), "localhost");
+    EXPECT_EQ(result->get_header("Accept"), "*/*");
+    EXPECT_EQ(result->get_header("X-Not-Exist"), std::nullopt);
+}
+
+TEST(ParseRequest, CaseInsensitiveHeaderLookup) {
+    auto result = tinyhttp::parse_request(
+        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\n\r\n");
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->get_header("user-agent"), "foobar/1.2.3");
+    EXPECT_EQ(result->get_header("USER-AGENT"), "foobar/1.2.3");
+    EXPECT_EQ(result->get_header("User-Agent"), "foobar/1.2.3");
+    EXPECT_EQ(result->get_header("uSeR-aGeNt"), "foobar/1.2.3");
+}
+
 TEST(MatchEchoPath, DifferentPrefixReturnsNullopt) {
     auto result = tinyhttp::match_echo_path("/other/abc");
     EXPECT_FALSE(result.has_value());

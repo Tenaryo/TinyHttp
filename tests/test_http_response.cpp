@@ -57,6 +57,12 @@ auto route_response(std::string_view raw) -> std::vector<std::byte> {
         auto body_str = std::string(*echo);
         resp.add_header("Content-Length", std::to_string(body_str.size()));
         resp.set_body({reinterpret_cast<const std::byte*>(body_str.data()), body_str.size()});
+    } else if (path == "/user-agent") {
+        resp.set_status(200, "OK");
+        resp.add_header("Content-Type", "text/plain");
+        auto ua = std::string(parse_result->get_header("User-Agent").value_or(""));
+        resp.add_header("Content-Length", std::to_string(ua.size()));
+        resp.set_body({reinterpret_cast<const std::byte*>(ua.data()), ua.size()});
     } else {
         resp.set_status(404, "Not Found");
     }
@@ -139,4 +145,34 @@ TEST(HttpResponse, EchoEndpoint) {
 
     EXPECT_EQ(response,
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc");
+}
+
+TEST(HttpResponse, UserAgentEndpoint) {
+    constexpr uint16_t port = TEST_PORT + 3;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port,
+        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\n\r\n");
+    accept_future.wait();
+
+    EXPECT_EQ(response,
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/"
+              "1.2.3");
 }
