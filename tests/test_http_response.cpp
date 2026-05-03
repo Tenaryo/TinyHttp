@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <future>
+#include <numeric>
 #include <netinet/in.h>
 #include <string>
 #include <string_view>
@@ -175,4 +176,43 @@ TEST(HttpResponse, UserAgentEndpoint) {
     EXPECT_EQ(response,
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\n\r\nfoobar/"
               "1.2.3");
+}
+
+static void handle_one(tinyhttp::Connection conn) {
+    char buf[4096]{};
+    auto recv_result = conn.recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+    if (!recv_result) return;
+    auto raw = std::string_view{buf, *recv_result};
+    auto data = route_response(raw);
+    conn.send(data);
+}
+
+TEST(ConcurrentConnections, MultipleClientsGetResponse) {
+    constexpr uint16_t port = TEST_PORT + 10;
+    constexpr int num_clients = 5;
+
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto server_done = std::async(std::launch::async, [&] {
+        for (int i = 0; i < num_clients; ++i) {
+            auto conn_result = server.accept();
+            ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+            std::thread(handle_one, std::move(*conn_result)).detach();
+        }
+    });
+
+    std::vector<std::future<std::string>> client_futures;
+    for (int i = 0; i < num_clients; ++i) {
+        client_futures.push_back(std::async(std::launch::async, [=] {
+            return connect_and_read(port, "GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        }));
+    }
+
+    for (auto& f : client_futures) {
+        EXPECT_EQ(f.get(), "HTTP/1.1 200 OK\r\n\r\n");
+    }
+
+    server_done.wait();
 }
