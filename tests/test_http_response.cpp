@@ -271,3 +271,142 @@ TEST(HttpResponse, FilesEndpoint404) {
 
     std::filesystem::remove_all(test_dir);
 }
+
+// POST /files/{filename} → 201 Created
+TEST(HttpResponse, PostFilesReturns201) {
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_post_files";
+    std::filesystem::create_directories(test_dir);
+
+    constexpr uint16_t port = TEST_PORT + 6;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw, test_dir);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port, "POST /files/file_123 HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
+    accept_future.wait();
+
+    EXPECT_EQ(response, "HTTP/1.1 201 Created\r\n\r\n");
+
+    std::filesystem::remove_all(test_dir);
+}
+
+// POST /files/{filename} → file created with correct content
+TEST(HttpResponse, PostFilesCreatesFileWithContent) {
+    const auto test_dir =
+        std::filesystem::temp_directory_path() / "tinyhttp_test_post_content";
+    std::filesystem::create_directories(test_dir);
+
+    constexpr uint16_t port = TEST_PORT + 7;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw, test_dir);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port, "POST /files/content_test HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
+    accept_future.wait();
+    EXPECT_EQ(response, "HTTP/1.1 201 Created\r\n\r\n");
+
+    std::ifstream ifs(test_dir / "content_test");
+    ASSERT_TRUE(ifs.is_open());
+    std::string file_content(std::istreambuf_iterator<char>(ifs), {});
+    EXPECT_EQ(file_content, "12345");
+
+    std::filesystem::remove_all(test_dir);
+}
+
+// POST /files/{filename} without Content-Length → 400 Bad Request
+TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
+    const auto test_dir =
+        std::filesystem::temp_directory_path() / "tinyhttp_test_post_no_cl";
+    std::filesystem::create_directories(test_dir);
+
+    constexpr uint16_t port = TEST_PORT + 8;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw, test_dir);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response =
+        connect_and_read(port, "POST /files/no_cl HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    accept_future.wait();
+
+    EXPECT_EQ(response, "HTTP/1.1 400 Bad Request\r\n\r\n");
+
+    std::filesystem::remove_all(test_dir);
+}
+
+// POST /files/{filename} with path traversal → 404 Not Found
+TEST(HttpResponse, PostFilesPathTraversalReturns404) {
+    const auto test_dir =
+        std::filesystem::temp_directory_path() / "tinyhttp_test_post_traversal";
+    std::filesystem::create_directories(test_dir);
+
+    constexpr uint16_t port = TEST_PORT + 9;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw, test_dir);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port, "POST /files/../danger HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello");
+    accept_future.wait();
+
+    EXPECT_EQ(response, "HTTP/1.1 404 Not Found\r\n\r\n");
+
+    std::filesystem::remove_all(test_dir);
+}

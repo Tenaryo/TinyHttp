@@ -78,3 +78,10 @@ TEST(MatchEchoPath, DifferentPrefixReturnsNullopt) {
     auto result = tinyhttp::match_echo_path("/other/abc");
     EXPECT_FALSE(result.has_value());
 }
+
+TEST(ParseRequest, BodyFromContentLength) {
+    auto result = tinyhttp::parse_request(
+        "POST /files/test HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->body, "12345");
+}

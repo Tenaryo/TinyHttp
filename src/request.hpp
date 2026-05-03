@@ -14,6 +14,7 @@ class Request {
     std::string_view method;
     std::string_view path;
     std::string_view version;
+    std::string_view body;
 
     auto get_header(std::string_view name) const -> std::optional<std::string_view>;
   private:
