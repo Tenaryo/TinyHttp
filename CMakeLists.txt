@@ -22,6 +22,7 @@ find_package(ZLIB REQUIRED)
 
 add_executable(http-server
     src/main.cpp
+    src/config.cpp
     src/connection.cpp
     src/request.cpp
     src/response.cpp
