@@ -26,6 +26,7 @@ add_executable(http-server
     src/connection.cpp
     src/request.cpp
     src/response.cpp
+    src/router.cpp
     src/server.cpp
 )
 target_link_libraries(http-server PRIVATE TinyHttp_core Threads::Threads ZLIB::ZLIB)

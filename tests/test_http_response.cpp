@@ -2,7 +2,6 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
-#include <numeric>
 #include <netinet/in.h>
 #include <string>
 #include <string_view>
@@ -14,6 +13,7 @@
 
 #include "request.hpp"
 #include "response.hpp"
+#include "router.hpp"
 #include "server.hpp"
 
 static constexpr uint16_t TEST_PORT = 42201;
@@ -43,33 +43,17 @@ auto connect_and_read(uint16_t port, std::string_view request) -> std::string {
     return {buf, static_cast<size_t>(n)};
 }
 
-auto route_response(std::string_view raw) -> std::vector<std::byte> {
+auto route_response(std::string_view raw,
+                    const std::filesystem::path& dir = {}) -> std::vector<std::byte> {
     auto parse_result = tinyhttp::parse_request(raw);
-    tinyhttp::Response resp;
     if (!parse_result) {
+        tinyhttp::Response resp;
         resp.set_status(400, "Bad Request");
         return resp.serialize();
     }
 
-    auto& path = parse_result->path;
-    if (path == "/") {
-        resp.set_status(200, "OK");
-    } else if (auto echo = tinyhttp::match_echo_path(path)) {
-        resp.set_status(200, "OK");
-        resp.add_header("Content-Type", "text/plain");
-        auto body_str = std::string(*echo);
-        resp.add_header("Content-Length", std::to_string(body_str.size()));
-        resp.set_body({reinterpret_cast<const std::byte*>(body_str.data()), body_str.size()});
-    } else if (path == "/user-agent") {
-        resp.set_status(200, "OK");
-        resp.add_header("Content-Type", "text/plain");
-        auto ua = std::string(parse_result->get_header("User-Agent").value_or(""));
-        resp.add_header("Content-Length", std::to_string(ua.size()));
-        resp.set_body({reinterpret_cast<const std::byte*>(ua.data()), ua.size()});
-    } else {
-        resp.set_status(404, "Not Found");
-    }
-    return resp.serialize();
+    tinyhttp::Router router{dir};
+    return router.dispatch(*parse_result).serialize();
 }
 
 TEST(HttpResponse, Http200Root) {
@@ -171,8 +155,7 @@ TEST(HttpResponse, UserAgentEndpoint) {
     });
 
     auto response = connect_and_read(
-        port,
-        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\n\r\n");
+        port, "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\n\r\n");
     accept_future.wait();
 
     EXPECT_EQ(response,
@@ -183,7 +166,8 @@ TEST(HttpResponse, UserAgentEndpoint) {
 static void handle_one(tinyhttp::Connection conn) {
     char buf[4096]{};
     auto recv_result = conn.recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
-    if (!recv_result) return;
+    if (!recv_result)
+        return;
     auto raw = std::string_view{buf, *recv_result};
     auto data = route_response(raw);
     conn.send(data);
@@ -220,11 +204,10 @@ TEST(ConcurrentConnections, MultipleClientsGetResponse) {
 }
 
 TEST(HttpResponse, FilesEndpoint200) {
-    const std::filesystem::path test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_files";
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_files";
     std::filesystem::create_directories(test_dir);
-    const auto file_path = test_dir / "foo";
     {
-        std::ofstream ofs(file_path);
+        std::ofstream ofs(test_dir / "foo");
         ofs << "Hello, World!";
     }
 
@@ -242,39 +225,12 @@ TEST(HttpResponse, FilesEndpoint200) {
         ASSERT_TRUE(recv_result.has_value()) << "recv failed";
 
         auto raw = std::string_view{buf, *recv_result};
-        auto parse_result = tinyhttp::parse_request(raw);
-        tinyhttp::Response resp;
-
-        if (!parse_result) {
-            resp.set_status(400, "Bad Request");
-        } else if (auto& path = parse_result->path; path.starts_with("/files/")) {
-            auto filename = path.substr(std::string_view{"/files/"}.size());
-            auto full_path = test_dir / filename;
-            if (std::filesystem::exists(full_path) && std::filesystem::is_regular_file(full_path)) {
-                std::ifstream ifs(full_path, std::ios::binary | std::ios::ate);
-                auto size = ifs.tellg();
-                ifs.seekg(0, std::ios::beg);
-                std::string content(static_cast<std::size_t>(size), '\0');
-                ifs.read(content.data(), size);
-                resp.set_status(200, "OK");
-                resp.add_header("Content-Type", "application/octet-stream");
-                resp.add_header("Content-Length", std::to_string(size));
-                resp.set_body({reinterpret_cast<const std::byte*>(content.data()),
-                               static_cast<std::size_t>(size)});
-            } else {
-                resp.set_status(404, "Not Found");
-            }
-        } else {
-            resp.set_status(404, "Not Found");
-        }
-
-        auto data = resp.serialize();
+        auto data = route_response(raw, test_dir);
         auto send_result = conn_result->send(data);
         ASSERT_TRUE(send_result.has_value()) << "send failed";
     });
 
-    auto response =
-        connect_and_read(port, "GET /files/foo HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    auto response = connect_and_read(port, "GET /files/foo HTTP/1.1\r\nHost: localhost\r\n\r\n");
     accept_future.wait();
 
     EXPECT_EQ(response,
@@ -285,7 +241,7 @@ TEST(HttpResponse, FilesEndpoint200) {
 }
 
 TEST(HttpResponse, FilesEndpoint404) {
-    const std::filesystem::path test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_files_404";
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_files_404";
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 5;
@@ -302,24 +258,7 @@ TEST(HttpResponse, FilesEndpoint404) {
         ASSERT_TRUE(recv_result.has_value()) << "recv failed";
 
         auto raw = std::string_view{buf, *recv_result};
-        auto parse_result = tinyhttp::parse_request(raw);
-        tinyhttp::Response resp;
-
-        if (!parse_result) {
-            resp.set_status(400, "Bad Request");
-        } else if (auto& path = parse_result->path; path.starts_with("/files/")) {
-            auto filename = path.substr(std::string_view{"/files/"}.size());
-            auto full_path = test_dir / filename;
-            if (std::filesystem::exists(full_path) && std::filesystem::is_regular_file(full_path)) {
-                resp.set_status(200, "OK");
-            } else {
-                resp.set_status(404, "Not Found");
-            }
-        } else {
-            resp.set_status(404, "Not Found");
-        }
-
-        auto data = resp.serialize();
+        auto data = route_response(raw, test_dir);
         auto send_result = conn_result->send(data);
         ASSERT_TRUE(send_result.has_value()) << "send failed";
     });
