@@ -1,5 +1,7 @@
 #include "router.hpp"
 
+#include "encoding.hpp"
+
 #include <charconv>
 #include <fcntl.h>
 #include <string>
@@ -18,6 +20,8 @@ auto Router::dispatch(const Request& req) const -> Response {
         resp.set_status(200, "OK");
     } else if (auto echo = match_echo_path(req.path)) {
         resp.set_status(200, "OK");
+        if (auto enc = negotiate_encoding(req))
+            resp.add_header("Content-Encoding", *enc);
         resp.add_header("Content-Type", "text/plain");
         auto body = std::string(*echo);
         resp.add_header("Content-Length", std::to_string(body.size()));
