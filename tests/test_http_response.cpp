@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <zlib.h>
 
 #include "request.hpp"
 #include "response.hpp"
@@ -401,9 +402,35 @@ TEST(HttpResponse, EchoWithGzipAcceptEncoding) {
         port, "GET /echo/abc HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\n\r\n");
     accept_future.wait();
 
-    EXPECT_EQ(response,
-              "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-"
-              "Length: 3\r\n\r\nabc");
+    EXPECT_TRUE(response.starts_with("HTTP/1.1 200 OK\r\n"));
+    EXPECT_NE(response.find("Content-Encoding: gzip\r\n"), std::string::npos);
+    EXPECT_NE(response.find("Content-Type: text/plain\r\n"), std::string::npos);
+    EXPECT_NE(response.find("Content-Length: "), std::string::npos);
+
+    auto body_start = response.find("\r\n\r\n");
+    ASSERT_NE(body_start, std::string::npos);
+    body_start += 4;
+
+    z_stream strm{};
+    strm.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(response.data())) + body_start;
+    strm.avail_in = static_cast<uInt>(response.size() - body_start);
+
+    int rc = inflateInit2(&strm, 16 + MAX_WBITS);
+    ASSERT_EQ(rc, Z_OK) << "inflateInit2 failed";
+
+    std::string decompressed;
+    char out[256];
+    do {
+        strm.next_out = reinterpret_cast<Bytef*>(out);
+        strm.avail_out = sizeof(out);
+        rc = inflate(&strm, Z_NO_FLUSH);
+        ASSERT_NE(rc, Z_STREAM_ERROR) << "inflate stream error";
+        ASSERT_NE(rc, Z_DATA_ERROR) << "inflate data error";
+        decompressed.append(out, sizeof(out) - strm.avail_out);
+    } while (rc != Z_STREAM_END);
+
+    inflateEnd(&strm);
+    EXPECT_EQ(decompressed, "abc");
 }
 
 TEST(HttpResponse, EchoWithUnsupportedAcceptEncoding) {
