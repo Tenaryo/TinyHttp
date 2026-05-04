@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <cstring>
+#include <expected>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -120,11 +121,14 @@ TEST(GzipCompression, RoundTrip) {
     };
 
     auto compressed = tinyhttp::compress_gzip("abc");
-    EXPECT_EQ(decompress(compressed), "abc");
+    ASSERT_TRUE(compressed.has_value()) << compressed.error();
+    EXPECT_EQ(decompress(*compressed), "abc");
 
     auto compressed2 = tinyhttp::compress_gzip("hello world");
-    EXPECT_EQ(decompress(compressed2), "hello world");
+    ASSERT_TRUE(compressed2.has_value()) << compressed2.error();
+    EXPECT_EQ(decompress(*compressed2), "hello world");
 
     auto compressed3 = tinyhttp::compress_gzip("");
-    EXPECT_EQ(decompress(compressed3), "");
+    ASSERT_TRUE(compressed3.has_value()) << compressed3.error();
+    EXPECT_EQ(decompress(*compressed3), "");
 }

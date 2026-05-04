@@ -1,6 +1,7 @@
 #include "router.hpp"
 
 #include "encoding.hpp"
+#include "gzip.hpp"
 
 #include <charconv>
 #include <fcntl.h>
@@ -20,10 +21,18 @@ auto Router::dispatch(const Request& req) const -> Response {
         resp.set_status(200, "OK");
     } else if (auto echo = match_echo_path(req.path)) {
         resp.set_status(200, "OK");
-        if (auto enc = negotiate_encoding(req))
-            resp.add_header("Content-Encoding", *enc);
         resp.add_header("Content-Type", "text/plain");
         auto body = std::string(*echo);
+
+        if (auto enc = negotiate_encoding(req); enc == "gzip") {
+            if (auto compressed = compress_gzip(body)) {
+                resp.add_header("Content-Encoding", "gzip");
+                resp.add_header("Content-Length", std::to_string(compressed->size()));
+                resp.set_body(*compressed);
+                return resp;
+            }
+        }
+
         resp.add_header("Content-Length", std::to_string(body.size()));
         resp.set_body({reinterpret_cast<const std::byte*>(body.data()), body.size()});
     } else if (req.path == "/user-agent") {
