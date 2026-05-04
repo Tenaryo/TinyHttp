@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <ranges>
 
 namespace tinyhttp {
@@ -61,6 +62,15 @@ auto parse_request(std::string_view raw) -> std::expected<Request, std::string> 
             req.headers_.emplace_back(name, value);
         }
         pos = next + 2;
+    }
+
+    auto body_start = pos + 2;
+    if (auto cl = req.get_header("Content-Length")) {
+        size_t length = 0;
+        auto [ptr, ec] = std::from_chars(cl->data(), cl->data() + cl->size(), length);
+        if (ec == std::errc{} && length <= raw.size() - body_start) {
+            req.body = raw.substr(body_start, length);
+        }
     }
 
     return req;
