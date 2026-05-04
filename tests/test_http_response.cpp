@@ -377,6 +377,64 @@ TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
     std::filesystem::remove_all(test_dir);
 }
 
+TEST(HttpResponse, EchoWithGzipAcceptEncoding) {
+    constexpr uint16_t port = TEST_PORT + 11;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port, "GET /echo/abc HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\n\r\n");
+    accept_future.wait();
+
+    EXPECT_EQ(response,
+              "HTTP/1.1 200 OK\r\nContent-Encoding: gzip\r\nContent-Type: text/plain\r\nContent-"
+              "Length: 3\r\n\r\nabc");
+}
+
+TEST(HttpResponse, EchoWithUnsupportedAcceptEncoding) {
+    constexpr uint16_t port = TEST_PORT + 12;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    auto response = connect_and_read(
+        port,
+        "GET /echo/abc HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: invalid-encoding\r\n\r\n");
+    accept_future.wait();
+
+    EXPECT_EQ(response,
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nabc");
+}
+
 // POST /files/{filename} with path traversal → 404 Not Found
 TEST(HttpResponse, PostFilesPathTraversalReturns404) {
     const auto test_dir =
