@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 #include <zlib.h>
 
+#include "connection_handler.hpp"
 #include "request.hpp"
 #include "response.hpp"
 #include "router.hpp"
@@ -297,8 +298,8 @@ TEST(HttpResponse, PostFilesReturns201) {
         ASSERT_TRUE(send_result.has_value()) << "send failed";
     });
 
-    auto response = connect_and_read(
-        port, "POST /files/file_123 HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
+    auto response =
+        connect_and_read(port, "POST /files/file_123 HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
     accept_future.wait();
 
     EXPECT_EQ(response, "HTTP/1.1 201 Created\r\n\r\n");
@@ -308,8 +309,7 @@ TEST(HttpResponse, PostFilesReturns201) {
 
 // POST /files/{filename} → file created with correct content
 TEST(HttpResponse, PostFilesCreatesFileWithContent) {
-    const auto test_dir =
-        std::filesystem::temp_directory_path() / "tinyhttp_test_post_content";
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_post_content";
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 7;
@@ -346,8 +346,7 @@ TEST(HttpResponse, PostFilesCreatesFileWithContent) {
 
 // POST /files/{filename} without Content-Length → 400 Bad Request
 TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
-    const auto test_dir =
-        std::filesystem::temp_directory_path() / "tinyhttp_test_post_no_cl";
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_post_no_cl";
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 8;
@@ -369,8 +368,7 @@ TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
         ASSERT_TRUE(send_result.has_value()) << "send failed";
     });
 
-    auto response =
-        connect_and_read(port, "POST /files/no_cl HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    auto response = connect_and_read(port, "POST /files/no_cl HTTP/1.1\r\nHost: localhost\r\n\r\n");
     accept_future.wait();
 
     EXPECT_EQ(response, "HTTP/1.1 400 Bad Request\r\n\r\n");
@@ -464,8 +462,7 @@ TEST(HttpResponse, EchoWithUnsupportedAcceptEncoding) {
 
 // POST /files/{filename} with path traversal → 404 Not Found
 TEST(HttpResponse, PostFilesPathTraversalReturns404) {
-    const auto test_dir =
-        std::filesystem::temp_directory_path() / "tinyhttp_test_post_traversal";
+    const auto test_dir = std::filesystem::temp_directory_path() / "tinyhttp_test_post_traversal";
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 9;
@@ -487,8 +484,8 @@ TEST(HttpResponse, PostFilesPathTraversalReturns404) {
         ASSERT_TRUE(send_result.has_value()) << "send failed";
     });
 
-    auto response = connect_and_read(
-        port, "POST /files/../danger HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello");
+    auto response =
+        connect_and_read(port, "POST /files/../danger HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello");
     accept_future.wait();
 
     EXPECT_EQ(response, "HTTP/1.1 404 Not Found\r\n\r\n");
@@ -505,21 +502,13 @@ TEST(PersistentConnection, TwoSequentialRequests) {
     auto accept_future = std::async(std::launch::async, [&] {
         auto conn_result = server.accept();
         ASSERT_TRUE(conn_result.has_value()) << "accept failed";
-
-        char buf[4096]{};
-        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
-        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
-
-        auto raw = std::string_view{buf, *recv_result};
-        auto data = route_response(raw);
-        auto send_result = conn_result->send(data);
-        ASSERT_TRUE(send_result.has_value()) << "send failed";
+        tinyhttp::handle_connection(std::move(*conn_result), tinyhttp::Router{{}});
     });
 
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     ASSERT_GE(fd, 0) << "failed to create client socket";
 
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_port = ::htons(port);
     addr.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
@@ -536,9 +525,8 @@ TEST(PersistentConnection, TwoSequentialRequests) {
     EXPECT_EQ(response1,
               "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nbanana");
 
-    std::string req2 =
-        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: "
-        "blueberry/apple-blueberry\r\n\r\n";
+    std::string req2 = "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: "
+                       "blueberry/apple-blueberry\r\n\r\n";
     auto sent2 = ::send(fd, req2.data(), req2.size(), 0);
     ASSERT_EQ(sent2, static_cast<ssize_t>(req2.size())) << "failed to send request 2";
 
@@ -563,28 +551,19 @@ TEST(PersistentConnection, ConnectionCloseHeader) {
     auto accept_future = std::async(std::launch::async, [&] {
         auto conn_result = server.accept();
         ASSERT_TRUE(conn_result.has_value()) << "accept failed";
-
-        char buf[4096]{};
-        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
-        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
-
-        auto raw = std::string_view{buf, *recv_result};
-        auto data = route_response(raw);
-        auto send_result = conn_result->send(data);
-        ASSERT_TRUE(send_result.has_value()) << "send failed";
+        tinyhttp::handle_connection(std::move(*conn_result), tinyhttp::Router{{}});
     });
 
     int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     ASSERT_GE(fd, 0) << "failed to create client socket";
 
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr {};
     addr.sin_family = AF_INET;
     addr.sin_port = ::htons(port);
     addr.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
     ASSERT_EQ(::connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)), 0);
 
-    std::string req =
-        "GET / HTTP/1.1\r\nConnection: close\r\nHost: localhost\r\n\r\n";
+    std::string req = "GET / HTTP/1.1\r\nConnection: close\r\nHost: localhost\r\n\r\n";
     auto sent = ::send(fd, req.data(), req.size(), 0);
     ASSERT_EQ(sent, static_cast<ssize_t>(req.size())) << "failed to send request";
 

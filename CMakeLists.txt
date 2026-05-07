@@ -24,6 +24,7 @@ add_executable(http-server
     src/main.cpp
     src/config.cpp
     src/connection.cpp
+    src/connection_handler.cpp
     src/gzip.cpp
     src/request.cpp
     src/response.cpp

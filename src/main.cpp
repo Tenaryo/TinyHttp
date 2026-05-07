@@ -1,9 +1,10 @@
 #include "config.hpp"
-#include "request.hpp"
+#include "connection_handler.hpp"
 #include "router.hpp"
 #include "server.hpp"
 
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <span>
 #include <string_view>
@@ -29,30 +30,6 @@ auto main(int argc, char** argv) -> int {
         return 1;
     }
 
-    auto handle_connection = [&router](tinyhttp::Connection conn) {
-        std::byte buf[4096];
-        auto recv_result = conn.recv(buf);
-        if (!recv_result) {
-            std::cerr << "Failed to recv: " << recv_result.error().message() << "\n";
-            return;
-        }
-
-        auto raw = std::string_view{reinterpret_cast<const char*>(buf), *recv_result};
-        auto parse_result = tinyhttp::parse_request(raw);
-
-        tinyhttp::Response resp;
-        if (!parse_result) {
-            resp.set_status(400, "Bad Request");
-        } else {
-            resp = router.dispatch(*parse_result);
-        }
-
-        auto data = resp.serialize();
-        if (auto result = conn.send(data); !result) {
-            std::cerr << "Failed to send: " << result.error().message() << "\n";
-        }
-    };
-
     while (true) {
         std::cout << "Waiting for a client to connect...\n";
 
@@ -62,7 +39,8 @@ auto main(int argc, char** argv) -> int {
             continue;
         }
 
-        std::jthread{handle_connection, std::move(*conn_result)}.detach();
+        std::jthread{tinyhttp::handle_connection, std::move(*conn_result), std::cref(router)}
+            .detach();
     }
 
     return 0;
