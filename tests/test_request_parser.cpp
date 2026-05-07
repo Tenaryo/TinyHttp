@@ -62,8 +62,9 @@ TEST(MatchEchoPath, NoTrailingSlashReturnsNullopt) {
 }
 
 TEST(ParseRequest, ExtractsHeaders) {
-    auto result = tinyhttp::parse_request(
-        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: foobar/1.2.3\r\nAccept: */*\r\n\r\n");
+    auto result =
+        tinyhttp::parse_request("GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: "
+                                "foobar/1.2.3\r\nAccept: */*\r\n\r\n");
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->get_header("User-Agent"), "foobar/1.2.3");
     EXPECT_EQ(result->get_header("Host"), "localhost");
@@ -87,8 +88,8 @@ TEST(MatchEchoPath, DifferentPrefixReturnsNullopt) {
 }
 
 TEST(ParseRequest, BodyFromContentLength) {
-    auto result = tinyhttp::parse_request(
-        "POST /files/test HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
+    auto result =
+        tinyhttp::parse_request("POST /files/test HTTP/1.1\r\nContent-Length: 5\r\n\r\n12345");
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ(result->body, "12345");
 }
