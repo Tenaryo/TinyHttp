@@ -59,7 +59,7 @@ auto route_response(std::string_view raw,
 }
 
 TEST(HttpResponse, Http200Root) {
-    tinyhttp::Server server{"0.0.0.0", TEST_PORT};
+    tinyhttp::Server server{TEST_PORT};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -85,7 +85,7 @@ TEST(HttpResponse, Http200Root) {
 
 TEST(HttpResponse, Http404NotFound) {
     constexpr uint16_t port = TEST_PORT + 1;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -111,7 +111,7 @@ TEST(HttpResponse, Http404NotFound) {
 
 TEST(HttpResponse, EchoEndpoint) {
     constexpr uint16_t port = TEST_PORT + 2;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -138,7 +138,7 @@ TEST(HttpResponse, EchoEndpoint) {
 
 TEST(HttpResponse, UserAgentEndpoint) {
     constexpr uint16_t port = TEST_PORT + 3;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -172,14 +172,14 @@ static void handle_one(tinyhttp::Connection conn) {
         return;
     auto raw = std::string_view{buf, *recv_result};
     auto data = route_response(raw);
-    conn.send(data);
+    static_cast<void>(conn.send(data));
 }
 
 TEST(ConcurrentConnections, MultipleClientsGetResponse) {
     constexpr uint16_t port = TEST_PORT + 10;
     constexpr int num_clients = 5;
 
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -214,7 +214,7 @@ TEST(HttpResponse, FilesEndpoint200) {
     }
 
     constexpr uint16_t port = TEST_PORT + 4;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -247,7 +247,7 @@ TEST(HttpResponse, FilesEndpoint404) {
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 5;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -280,7 +280,7 @@ TEST(HttpResponse, PostFilesReturns201) {
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 6;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -313,7 +313,7 @@ TEST(HttpResponse, PostFilesCreatesFileWithContent) {
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 7;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -350,7 +350,7 @@ TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 8;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -378,7 +378,7 @@ TEST(HttpResponse, PostFilesNoContentLengthReturns400) {
 
 TEST(HttpResponse, EchoWithGzipAcceptEncoding) {
     constexpr uint16_t port = TEST_PORT + 11;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -433,7 +433,7 @@ TEST(HttpResponse, EchoWithGzipAcceptEncoding) {
 
 TEST(HttpResponse, EchoWithUnsupportedAcceptEncoding) {
     constexpr uint16_t port = TEST_PORT + 12;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -466,7 +466,7 @@ TEST(HttpResponse, PostFilesPathTraversalReturns404) {
     std::filesystem::create_directories(test_dir);
 
     constexpr uint16_t port = TEST_PORT + 9;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -495,7 +495,7 @@ TEST(HttpResponse, PostFilesPathTraversalReturns404) {
 
 TEST(PersistentConnection, TwoSequentialRequests) {
     constexpr uint16_t port = TEST_PORT + 13;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 
@@ -544,7 +544,7 @@ TEST(PersistentConnection, TwoSequentialRequests) {
 
 TEST(PersistentConnection, ConnectionCloseHeader) {
     constexpr uint16_t port = TEST_PORT + 14;
-    tinyhttp::Server server{"0.0.0.0", port};
+    tinyhttp::Server server{port};
     auto listen_result = server.listen();
     ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
 

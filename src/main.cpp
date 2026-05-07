@@ -2,12 +2,10 @@
 #include "connection_handler.hpp"
 #include "router.hpp"
 #include "server.hpp"
+#include "thread_pool.hpp"
 
 #include <cstdlib>
-#include <functional>
 #include <iostream>
-#include <span>
-#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -23,7 +21,8 @@ auto main(int argc, char** argv) -> int {
     }
 
     tinyhttp::Router router{config_result->directory};
-    tinyhttp::Server server{"0.0.0.0", 4221};
+    tinyhttp::Server server{4221};
+    tinyhttp::ThreadPool pool(std::thread::hardware_concurrency());
 
     if (auto result = server.listen(); !result) {
         std::cerr << "Failed to listen: " << result.error().message() << "\n";
@@ -39,8 +38,9 @@ auto main(int argc, char** argv) -> int {
             continue;
         }
 
-        std::jthread{tinyhttp::handle_connection, std::move(*conn_result), std::cref(router)}
-            .detach();
+        pool.enqueue([conn = std::move(*conn_result), &router]() mutable {
+            tinyhttp::handle_connection(std::move(conn), router);
+        });
     }
 
     return 0;

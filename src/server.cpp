@@ -8,9 +8,7 @@
 
 namespace tinyhttp {
 
-Server::Server(std::string_view /*host*/, uint16_t port) : port_{port} {
-    fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
-}
+Server::Server(uint16_t port) : port_{port} { fd_ = ::socket(AF_INET, SOCK_STREAM, 0); }
 
 Server::~Server() {
     if (fd_ >= 0) {
@@ -33,7 +31,7 @@ auto Server::listen() -> std::expected<void, std::error_code> {
         return std::unexpected(std::error_code{errno, std::system_category()});
     }
 
-    if (::listen(fd_, 5) != 0) {
+    if (::listen(fd_, SOMAXCONN) != 0) {
         return std::unexpected(std::error_code{errno, std::system_category()});
     }
 
