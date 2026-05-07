@@ -495,3 +495,109 @@ TEST(HttpResponse, PostFilesPathTraversalReturns404) {
 
     std::filesystem::remove_all(test_dir);
 }
+
+TEST(PersistentConnection, TwoSequentialRequests) {
+    constexpr uint16_t port = TEST_PORT + 13;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "failed to create client socket";
+
+    struct sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = ::htons(port);
+    addr.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+    ASSERT_EQ(::connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)), 0);
+
+    std::string req1 = "GET /echo/banana HTTP/1.1\r\nHost: localhost\r\n\r\n";
+    auto sent1 = ::send(fd, req1.data(), req1.size(), 0);
+    ASSERT_EQ(sent1, static_cast<ssize_t>(req1.size())) << "failed to send request 1";
+
+    char resp_buf1[4096]{};
+    auto n1 = ::recv(fd, resp_buf1, sizeof(resp_buf1), 0);
+    ASSERT_GT(n1, 0) << "failed to recv response 1";
+    std::string response1(resp_buf1, static_cast<size_t>(n1));
+    EXPECT_EQ(response1,
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 6\r\n\r\nbanana");
+
+    std::string req2 =
+        "GET /user-agent HTTP/1.1\r\nHost: localhost\r\nUser-Agent: "
+        "blueberry/apple-blueberry\r\n\r\n";
+    auto sent2 = ::send(fd, req2.data(), req2.size(), 0);
+    ASSERT_EQ(sent2, static_cast<ssize_t>(req2.size())) << "failed to send request 2";
+
+    char resp_buf2[4096]{};
+    auto n2 = ::recv(fd, resp_buf2, sizeof(resp_buf2), 0);
+    ASSERT_GT(n2, 0) << "failed to recv response 2";
+    std::string response2(resp_buf2, static_cast<size_t>(n2));
+    EXPECT_EQ(response2,
+              "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: "
+              "25\r\n\r\nblueberry/apple-blueberry");
+
+    ::close(fd);
+    accept_future.wait();
+}
+
+TEST(PersistentConnection, ConnectionCloseHeader) {
+    constexpr uint16_t port = TEST_PORT + 14;
+    tinyhttp::Server server{"0.0.0.0", port};
+    auto listen_result = server.listen();
+    ASSERT_TRUE(listen_result.has_value()) << "server listen failed";
+
+    auto accept_future = std::async(std::launch::async, [&] {
+        auto conn_result = server.accept();
+        ASSERT_TRUE(conn_result.has_value()) << "accept failed";
+
+        char buf[4096]{};
+        auto recv_result = conn_result->recv({reinterpret_cast<std::byte*>(buf), sizeof(buf)});
+        ASSERT_TRUE(recv_result.has_value()) << "recv failed";
+
+        auto raw = std::string_view{buf, *recv_result};
+        auto data = route_response(raw);
+        auto send_result = conn_result->send(data);
+        ASSERT_TRUE(send_result.has_value()) << "send failed";
+    });
+
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GE(fd, 0) << "failed to create client socket";
+
+    struct sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = ::htons(port);
+    addr.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
+    ASSERT_EQ(::connect(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)), 0);
+
+    std::string req =
+        "GET / HTTP/1.1\r\nConnection: close\r\nHost: localhost\r\n\r\n";
+    auto sent = ::send(fd, req.data(), req.size(), 0);
+    ASSERT_EQ(sent, static_cast<ssize_t>(req.size())) << "failed to send request";
+
+    char resp_buf[4096]{};
+    auto n = ::recv(fd, resp_buf, sizeof(resp_buf), 0);
+    ASSERT_GT(n, 0) << "failed to recv response";
+    std::string response(resp_buf, static_cast<size_t>(n));
+    EXPECT_NE(response.find("HTTP/1.1 200 OK\r\n"), std::string::npos);
+    EXPECT_NE(response.find("Connection: close\r\n"), std::string::npos);
+
+    auto n2 = ::recv(fd, resp_buf, sizeof(resp_buf), 0);
+    EXPECT_EQ(n2, 0) << "connection should be closed by server after Connection: close";
+
+    ::close(fd);
+    accept_future.wait();
+}
