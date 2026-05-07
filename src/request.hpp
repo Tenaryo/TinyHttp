@@ -22,7 +22,13 @@ class Request {
     std::vector<std::pair<std::string_view, std::string_view>> headers_;
 };
 
-auto parse_request(std::string_view raw) -> std::expected<Request, std::string>;
-auto match_echo_path(std::string_view path) -> std::optional<std::string_view>;
+[[nodiscard]] auto parse_request(std::string_view raw) -> std::expected<Request, std::string>;
+[[nodiscard]] constexpr auto
+match_echo_path(std::string_view path) -> std::optional<std::string_view> {
+    constexpr std::string_view prefix = "/echo/";
+    if (path.starts_with(prefix))
+        return path.substr(prefix.size());
+    return std::nullopt;
+}
 
 } // namespace tinyhttp

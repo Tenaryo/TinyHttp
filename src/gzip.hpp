@@ -8,6 +8,7 @@
 
 namespace tinyhttp {
 
-auto compress_gzip(std::string_view input) -> std::expected<std::vector<std::byte>, std::string>;
+[[nodiscard]] auto
+compress_gzip(std::string_view input) -> std::expected<std::vector<std::byte>, std::string>;
 
 } // namespace tinyhttp
