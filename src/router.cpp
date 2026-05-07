@@ -28,7 +28,7 @@ auto Router::dispatch(const Request& req) const -> Response {
             if (auto compressed = compress_gzip(body)) {
                 resp.add_header("Content-Encoding", "gzip");
                 resp.add_header("Content-Length", std::to_string(compressed->size()));
-                resp.set_body(*compressed);
+                resp.set_body(std::move(*compressed));
                 return resp;
             }
         }

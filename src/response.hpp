@@ -15,7 +15,8 @@ class Response {
     auto set_status(uint16_t code, std::string_view reason) -> Response&;
     auto add_header(std::string_view key, std::string_view value) -> Response&;
     auto set_body(std::span<const std::byte> body) -> Response&;
-    auto serialize() const -> std::vector<std::byte>;
+    auto set_body(std::vector<std::byte>&& body) -> Response&;
+    [[nodiscard]] auto serialize() const -> std::vector<std::byte>;
   private:
     uint16_t status_code_{200};
     std::string reason_{"OK"};

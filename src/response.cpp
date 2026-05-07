@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <format>
+#include <iterator>
 
 namespace tinyhttp {
 
@@ -21,16 +22,23 @@ auto Response::set_body(std::span<const std::byte> body) -> Response& {
     return *this;
 }
 
+auto Response::set_body(std::vector<std::byte>&& body) -> Response& {
+    body_ = std::move(body);
+    return *this;
+}
+
 auto Response::serialize() const -> std::vector<std::byte> {
     auto raw = std::format("HTTP/1.1 {} {}\r\n", status_code_, reason_);
     for (const auto& [key, value] : headers_) {
-        raw += std::format("{}: {}\r\n", key, value);
+        std::format_to(std::back_inserter(raw), "{}: {}\r\n", key, value);
     }
     raw += "\r\n";
-    raw.append(reinterpret_cast<const char*>(body_.data()), body_.size());
 
-    auto bytes = std::vector<std::byte>(raw.size());
-    std::memcpy(bytes.data(), raw.data(), raw.size());
+    std::vector<std::byte> bytes;
+    bytes.reserve(raw.size() + body_.size());
+    auto p = reinterpret_cast<const std::byte*>(raw.data());
+    bytes.insert(bytes.end(), p, p + raw.size());
+    bytes.insert(bytes.end(), body_.begin(), body_.end());
     return bytes;
 }
 
