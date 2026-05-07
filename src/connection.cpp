@@ -29,7 +29,7 @@ Connection::~Connection() {
 
 auto Connection::send(std::span<const std::byte> data) -> std::expected<void, std::error_code> {
     while (!data.empty()) {
-        auto sent = ::send(fd_, data.data(), data.size(), 0);
+        auto sent = ::send(fd_, data.data(), data.size(), MSG_NOSIGNAL);
         if (sent < 0) {
             return std::unexpected(std::error_code{errno, std::system_category()});
         }

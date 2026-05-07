@@ -16,8 +16,9 @@ class Connection {
     auto operator=(const Connection&) -> Connection& = delete;
     ~Connection();
 
-    auto send(std::span<const std::byte> data) -> std::expected<void, std::error_code>;
-    auto recv(std::span<std::byte> buf) -> std::expected<size_t, std::error_code>;
+    [[nodiscard]] auto
+    send(std::span<const std::byte> data) -> std::expected<void, std::error_code>;
+    [[nodiscard]] auto recv(std::span<std::byte> buf) -> std::expected<size_t, std::error_code>;
   private:
     int fd_;
 };

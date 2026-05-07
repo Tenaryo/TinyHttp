@@ -30,7 +30,9 @@ void handle_connection(Connection conn, const Router& router) {
         Response resp;
         if (!parse_result) {
             resp.set_status(400, "Bad Request");
-            conn.send(resp.serialize());
+            if (auto result = conn.send(resp.serialize()); !result) {
+                std::cerr << "Failed to send: " << result.error().message() << "\n";
+            }
             return;
         }
 
